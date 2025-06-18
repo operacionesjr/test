@@ -1,0 +1,4 @@
+mnemonic
+bip32utils
+pycryptodome
+eth-keys
