@@ -17,6 +17,7 @@ A command-line Python tool for working with BIP39 mnemonics, BIP32 hierarchical 
 *   **Target Address Searching:** For `search-sequential` and `search-random` commands, you can provide a file of target addresses (`--target-file`). The tool will check derived addresses against this list and highlight any matches.
 *   **Save Matches:** Found target addresses from searches can be saved to a separate CSV file using `--matches-file`.
 *   **CSV Output:** Save results from all search commands to a CSV file using the `--output-file` option. Output format adapts to the selected coin type.
+*   **Custom PBKDF2 Iterations:** Specify custom PBKDF2 iteration counts for seed generation (for advanced users; produces non-standard seeds).
 
 ## Installation
 
@@ -70,7 +71,11 @@ python -m bip39_toolkit.bip39_toolkit.cli derive-seed "your twelve word mnemonic
 
 #### `derive-address`
 Derive and display detailed information for a single address (ETH or BTC).
-**Output includes:** Common details (Mnemonic, Passphrase, BIP39 Seed, BIP32 Root Key, Path, Private Key, Compressed Public Key) and then coin-specific details.
+Options include:
+    *   `--pbkdf2-rounds <number>`: Specify the number of PBKDF2 iterations (default: 2048).
+    **WARNING:** Using a PBKDF2 iteration count other than 2048 will result in a non-standard seed that is incompatible with most wallets.
+
+**Output includes:** Common details (Mnemonic, Passphrase, PBKDF2 Iterations used, BIP39 Seed, BIP32 Root Key, Path, Private Key, Compressed Public Key) and then coin-specific details.
 *   For ETH: Uncompressed Public Key and ETH Address.
 *   For BTC: P2PKH, P2SH-P2WPKH, and P2WPKH addresses.
 
@@ -83,26 +88,41 @@ python -m bip39_toolkit.bip39_toolkit.cli derive-address "letter ethics correct 
 ```bash
 python -m bip39_toolkit.bip39_toolkit.cli derive-address "letter ethics correct umbrella prevent search physical space prize type cover strong" --passphrase "testpassphrase" --coin BTC --path "m/84'/0'/0'/0/0"
 ```
+**With custom PBKDF2 rounds (e.g., 10000):**
+```bash
+python -m bip39_toolkit.bip39_toolkit.cli derive-address "your mnemonic..." --coin ETH --pbkdf2-rounds 10000
+```
 
 #### `search-sequential`
 Sequentially search derivation paths for a chosen coin (ETH or BTC).
 The output address and public key formats adapt to the selected coin (ETH address and uncompressed pubkey for ETH; BTC P2WPKH address and compressed pubkey for BTC).
-```bash
+Options include `[--account-start ... --index-end]`, `--output-file`, `--target-file`, `--matches-file`, and:
+    *   `--pbkdf2-rounds-start <number>`: Start of PBKDF2 iteration range (default: 2048).
+    **WARNING:** Using a PBKDF2 iteration count other than 2048 will result in a non-standard seed that is incompatible with most wallets.
+    *   `--pbkdf2-rounds-end <number>`: End of PBKDF2 iteration range (default: 2048).
+    **WARNING:** Using a PBKDF2 iteration count other than 2048 will result in a non-standard seed that is incompatible with most wallets.
+
 # Example for ETH: Search account 0, change 0, indices 0-5
 python -m bip39_toolkit.bip39_toolkit.cli search-sequential "your mnemonic..." --coin ETH --account-start 0 --account-end 0 --index-start 0 --index-end 5
 
-# Example for BTC: Search account 0, change 0, indices 0-3 (uses default BTC path m/84'/0'/...)
+# Example for BTC with custom PBKDF2 range (2048-2049 iterations):
+python -m bip39_toolkit.bip39_toolkit.cli search-sequential "your mnemonic..." --coin BTC --index-start 0 --index-end 0 --pbkdf2-rounds-start 2048 --pbkdf2-rounds-end 2049
+
+# Example for BTC (P2WPKH addresses by default in search): Search account 0, change 0, indices 0-3 (uses default BTC path m/84'/0'/...)
 python -m bip39_toolkit.bip39_toolkit.cli search-sequential "your mnemonic..." --coin BTC --account-start 0 --account-end 0 --index-start 0 --index-end 3 --output-file results_btc_seq.csv
 
 # Example for ETH with target address search:
 python -m bip39_toolkit.bip39_toolkit.cli search-sequential "your mnemonic..." --coin ETH --index-end 10 --target-file targets.txt --matches-file found_eth.csv
 ```
-**Output columns (stdout or CSV):** `Path, <Coin_Address_Type>, Private_Key_Hex, <Coin_Public_Key_Type_Hex>`
+**Output columns (stdout or CSV):** `PBKDF2_Rounds, Path, <Coin_Address_Type>, Private_Key_Hex, <Coin_Public_Key_Type_Hex>`
 
 #### `search-random`
 Randomly search derivation paths for a chosen coin (ETH or BTC).
 Output format adapts like `search-sequential`.
-```bash
+Options include `[--account-min ... --iterations]`, `--output-file`, `--target-file`, `--matches-file`, and:
+    *   `--pbkdf2-rounds <number>`: Number of PBKDF2 iterations (default: 2048).
+    **WARNING:** Using a PBKDF2 iteration count other than 2048 will result in a non-standard seed that is incompatible with most wallets.
+
 # Example for ETH: 10 random paths
 python -m bip39_toolkit.bip39_toolkit.cli search-random "your mnemonic..." --coin ETH --iterations 10
 
@@ -112,20 +132,23 @@ python -m bip39_toolkit.bip39_toolkit.cli search-random "your mnemonic..." --coi
 # Example for BTC with target address search:
 python -m bip39_toolkit.bip39_toolkit.cli search-random "your mnemonic..." --coin BTC --iterations 50 --target-file btc_targets.txt --matches-file found_btc_random.csv
 ```
-**Output columns (stdout or CSV):** `Path, <Coin_Address_Type>, Private_Key_Hex, <Coin_Public_Key_Type_Hex>`
+**Output columns (stdout or CSV):** `PBKDF2_Rounds, Path, <Coin_Address_Type>, Private_Key_Hex, <Coin_Public_Key_Type_Hex>`
 
 #### `search-mnemonics`
 Generate multiple random mnemonics and derive an address for a fixed path and coin type from each.
 If the default ETH path (`m/44'/60'/0'/0/0`) is used with `--coin BTC`, the path automatically adjusts to a default BTC P2WPKH path (e.g., `m/84'/0'/0'/0/0`).
 Output format adapts like other search commands.
-```bash
+Options include `[--count ... --path]`, `--output-file`, and:
+    *   `--pbkdf2-rounds <number>`: Number of PBKDF2 iterations (default: 2048).
+    **WARNING:** Using a PBKDF2 iteration count other than 2048 will result in a non-standard seed that is incompatible with most wallets.
+
 # Example for ETH: Generate 5 mnemonics
 python -m bip39_toolkit.bip39_toolkit.cli search-mnemonics --coin ETH --count 5 --strength 128
 
 # Example for BTC: Generate 3 mnemonics, use a specific BTC path, save to CSV
 python -m bip39_toolkit.bip39_toolkit.cli search-mnemonics --coin BTC --count 3 --path "m/84'/0'/0'/0/0" --output-file results_btc_mnemonics.csv
 ```
-**Output columns (stdout or CSV):** `Mnemonic_Phrase, Path, <Coin_Address_Type>, Private_Key_Hex, <Coin_Public_Key_Type_Hex>`
+**Output columns (stdout or CSV):** `Mnemonic_Phrase, PBKDF2_Rounds, Path, <Coin_Address_Type>, Private_Key_Hex, <Coin_Public_Key_Type_Hex>`
 
 ### General Options
 *   `--help`: Show help message for the main tool or a specific command.

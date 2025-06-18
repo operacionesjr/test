@@ -354,5 +354,80 @@ class TestCLI(unittest.TestCase):
         self.assertIn("bc1q", result.stdout)
         self.assertIn("Random mnemonic search finished. Processed 1 mnemonics.", result.stdout)
 
+
+    def test_cli_derive_address_custom_pbkdf2_rounds(self):
+        custom_rounds = 100 # Non-default
+        args = [
+            "derive-address", TEST_MNEMONIC,
+            "--passphrase", TEST_PASSPHRASE,
+            "--coin", "ETH", # Keep it simple for this test
+            "--path", DEFAULT_PATH,
+            "--pbkdf2-rounds", str(custom_rounds)
+        ]
+        result = self.run_cli_command(args)
+        self.assertEqual(result.returncode, 0, f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+        self.assertIn(f"PBKDF2 Iterations: {custom_rounds}", result.stdout)
+
+    def test_cli_search_sequential_custom_pbkdf2_range(self):
+        rounds_start = 2048
+        rounds_end = 2049 # A small range of 2 iteration counts
+        args = [
+            "search-sequential", TEST_MNEMONIC,
+            "--passphrase", TEST_PASSPHRASE,
+            "--coin", "ETH",
+            "--account-start", "0", "--account-end", "0",
+            "--change-start", "0", "--change-end", "0",
+            "--index-start", "0", "--index-end", "0", # 1 path combination
+            "--pbkdf2-rounds-start", str(rounds_start),
+            "--pbkdf2-rounds-end", str(rounds_end)
+        ]
+        result = self.run_cli_command(args)
+        self.assertEqual(result.returncode, 0, f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+
+        self.assertIn("PBKDF2_Rounds,Path,ETH_Address,Private_Key_Hex,Public_Key_Uncompressed_Hex", result.stdout.replace(" ", ""))
+
+        self.assertIn(f"{rounds_start},{DEFAULT_PATH}", result.stdout)
+        self.assertIn(f"{rounds_end},{DEFAULT_PATH}", result.stdout)
+
+        data_lines = [line for line in result.stdout.splitlines() if line.startswith(str(rounds_start)) or line.startswith(str(rounds_end))]
+        self.assertEqual(len(data_lines), 2, "Expected 2 data lines for the PBKDF2 range.")
+        # The result count should be 2 (1 path * 2 PBKDF2 iterations)
+        self.assertIn(f"Sequential search finished. Found {len(data_lines)} addresses.", result.stdout)
+
+
+    def test_cli_search_random_custom_pbkdf2_rounds(self):
+        custom_rounds = 50
+        args = [
+            "search-random", TEST_MNEMONIC,
+            "--passphrase", TEST_PASSPHRASE,
+            "--coin", "ETH",
+            "--account-min", "0", "--account-max", "0",
+            "--change-min", "0", "--change-max", "0",
+            "--index-min", "0", "--index-max", "0", # 1 path combination
+            "--iterations", "1",
+            "--pbkdf2-rounds", str(custom_rounds)
+        ]
+        result = self.run_cli_command(args)
+        self.assertEqual(result.returncode, 0, f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+        self.assertIn(f"PBKDF2 Iterations: {custom_rounds}", result.stdout)
+        self.assertIn("PBKDF2_Rounds,Path,ETH_Address,Private_Key_Hex,Public_Key_Uncompressed_Hex", result.stdout.replace(" ", ""))
+        self.assertIn(f"{custom_rounds},{DEFAULT_PATH}", result.stdout)
+
+    def test_cli_search_mnemonics_custom_pbkdf2_rounds(self):
+        custom_rounds = 25
+        args = [
+            "search-mnemonics",
+            "--count", "1",
+            "--strength", "128",
+            "--coin", "ETH",
+            "--path", DEFAULT_PATH,
+            "--pbkdf2-rounds", str(custom_rounds)
+        ]
+        result = self.run_cli_command(args)
+        self.assertEqual(result.returncode, 0, f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+        self.assertIn(f"PBKDF2 Iterations: {custom_rounds}", result.stdout)
+        self.assertIn("Mnemonic_Phrase,PBKDF2_Rounds,Path,ETH_Address,Private_Key_Hex,Public_Key_Uncompressed_Hex", result.stdout.replace(" ", ""))
+        self.assertTrue(any(f",{custom_rounds},{DEFAULT_PATH}," in line for line in result.stdout.splitlines()), f"PBKDF2 rounds {custom_rounds} not found in data lines.")
+
 if __name__ == "__main__":
     unittest.main()

@@ -95,5 +95,64 @@ class TestBIP39Manager(unittest.TestCase):
                 self.assertEqual(generated_seed_hex, expected_seed_hex,
                                  f"Seed mismatch for vector {i}: {mnemonic_phrase}")
 
+
+    def test_generate_seed_custom_pbkdf2_iterations(self):
+        mnemonic_phrase = self.test_mnemonic_128 # "letter ethics correct umbrella prevent search physical space prize type cover strong"
+        passphrase = "testpassphrase"
+
+        # Standard BIP39 iterations (for reference, though our custom method defaults to it if not specified)
+        seed_2048_custom_default = self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, passphrase=passphrase)
+        # Explicitly 2048
+        seed_2048_custom_explicit = self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, passphrase=passphrase, iterations=2048)
+
+        # Seed from the original library method (which uses 2048)
+        # Note: mnemonic_to_seed uses the 'mnemonic' library, while generate_seed_custom_pbkdf2 uses pycryptodome.
+        # A direct byte-for-byte match is expected if both implement PBKDF2-HMAC-SHA512 correctly with same inputs.
+        seed_2048_library = self.bip39_manager.mnemonic_to_seed(mnemonic_phrase, passphrase=passphrase)
+
+        self.assertEqual(seed_2048_custom_default, seed_2048_library, "Custom PBKDF2 with default 2048 iterations should match library's 2048 output.")
+        self.assertEqual(seed_2048_custom_explicit, seed_2048_library, "Custom PBKDF2 with explicit 2048 iterations should match library's 2048 output.")
+
+        # Test with a different iteration count
+        seed_1000 = self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, passphrase=passphrase, iterations=1000)
+        self.assertIsInstance(seed_1000, bytes)
+        self.assertEqual(len(seed_1000), 64) # Should still be a 64-byte seed
+        self.assertNotEqual(seed_1000, seed_2048_library, "Seed with 1000 iterations should differ from 2048 iterations.")
+
+        seed_4096 = self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, passphrase=passphrase, iterations=4096)
+        self.assertIsInstance(seed_4096, bytes)
+        self.assertEqual(len(seed_4096), 64)
+        self.assertNotEqual(seed_4096, seed_2048_library, "Seed with 4096 iterations should differ from 2048 iterations.")
+        self.assertNotEqual(seed_4096, seed_1000, "Seed with 4096 iterations should differ from 1000 iterations.")
+
+    def test_generate_seed_custom_pbkdf2_invalid_iterations(self):
+        mnemonic_phrase = self.test_mnemonic_128
+        with self.assertRaisesRegex(ValueError, "PBKDF2 iterations count must be a positive integer."):
+            self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, iterations=0)
+        with self.assertRaisesRegex(ValueError, "PBKDF2 iterations count must be a positive integer."):
+            self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, iterations=-100)
+        with self.assertRaisesRegex(ValueError, "PBKDF2 iterations count must be a positive integer."):
+            self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_phrase, iterations="not_an_int")
+
+    def test_generate_seed_custom_pbkdf2_normalization(self):
+        # Using a simple ASCII string with an accent that NFKD would decompose.
+        # "résumé" contains 'e' with acute accent. NFKD decomposes it into 'e' and a combining acute accent.
+        mnemonic_with_accent = "résumé résumé résumé résumé résumé résumé résumé résumé résumé résumé résumé café" # Standard 12-word length
+        passphrase_with_accent = "passphrésé" # Also contains 'e' with acute accent
+
+        try:
+            seed_accent_2048 = self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_with_accent, passphrase_with_accent, iterations=2048)
+            self.assertIsInstance(seed_accent_2048, bytes)
+            self.assertEqual(len(seed_accent_2048), 64)
+
+            seed_accent_1000 = self.bip39_manager.generate_seed_custom_pbkdf2(mnemonic_with_accent, passphrase_with_accent, iterations=1000)
+            self.assertIsInstance(seed_accent_1000, bytes)
+            self.assertEqual(len(seed_accent_1000), 64)
+
+            self.assertNotEqual(seed_accent_2048, seed_accent_1000, "Seeds with different iterations should differ, even with accents.")
+
+        except Exception as e:
+            self.fail(f"generate_seed_custom_pbkdf2 failed with normalization-sensitive input: {e}")
+
 if __name__ == "__main__":
     unittest.main()
